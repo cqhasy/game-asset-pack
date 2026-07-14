@@ -24,6 +24,7 @@ type Project struct {
 	GameType    GameType    `json:"gameType"`    // RPG、ACT、SLG...
 	ViewType    ViewType    `json:"viewType"`    // TopDown、SideView、Isometric...
 	Description string 	 // Project description
+	Reference  string 	 // AI-generated reference image based on the project description
 	Style       string 	 // Art style of the project
 }
 

@@ -12,6 +12,7 @@ type LayerResult struct {
 }
 
 type CreateSceneRequest struct {
+	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
 	Style string `json:"style"`  // Style of the scene
 	Layers  []Layer `json:"layers"`  // Layers of the scene
 }
@@ -21,6 +22,8 @@ type CreateSceneResponse struct {
 }
 
 type CreateTileSetRequest struct {
+	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
+
 	Prompt string `json:"prompt"`  // Prompt for the tile set
 	Reference []string `json:"reference"`  // Reference images for tile set creation
 }
@@ -32,4 +35,27 @@ type CreateTileSetResponse struct {
 type MapService interface {
 	CreateScene(request *CreateSceneRequest) (*CreateSceneResponse, error)
 	CreateTileSet(request *CreateTileSetRequest) (*CreateTileSetResponse, error)
+}
+
+type ViewType string
+const (
+	ViewTypeTopDown ViewType = "TopDown"
+	ViewTypeSideView ViewType = "SideView"
+	ViewTypeIsometric ViewType = "Isometric"
+)
+
+type CreateObjectRequest struct {
+	UserPrompt string `json:"prompt"`  // Prompt for the object
+	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
+	Reference string `json:"reference"`  // Reference image for object creation
+	Size int `json:"size"`  // Size of the object (e.g. "32X32", "64X64")
+	View ViewType `json:"view"`  // View type of the object (e.g. "TopDown", "SideView", "Isometric")
+}
+
+type CreateObjectResponse struct {
+	Url string `json:"url"`       // Generated object image URL
+}
+
+type ObjectService interface {
+	CreateObject(request *CreateObjectRequest) (*CreateObjectResponse, error)
 }
