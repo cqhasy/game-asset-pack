@@ -1,5 +1,10 @@
 package ai
 
+type Size struct {
+	Width int `json:"width"`
+	Height int `json:"height"`
+}
+
 type Layer struct {
 	ID 	  uint     `json:"id"`        // Layer ID
 	Prompt string `json:"prompt"`  // Prompt for the layer
@@ -48,7 +53,7 @@ type CreateObjectRequest struct {
 	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
 	Derictions  int `json:"derictions"`  // Number of directions for the object (e.g. 1, 4, 8)
 	Reference string `json:"reference"`  // Reference image for object creation
-	Size int `json:"size"`  // Size of the object (e.g. "32X32", "64X64")
+	Size Size `json:"size"`  // Size of the object (e.g. "32X32", "64X64")
 	View ViewType `json:"view"`  // View type of the object (e.g. "TopDown", "SideView", "Isometric")
 }
 
