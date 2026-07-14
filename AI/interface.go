@@ -23,7 +23,6 @@ type CreateSceneResponse struct {
 
 type CreateTileSetRequest struct {
 	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
-
 	Prompt string `json:"prompt"`  // Prompt for the tile set
 	Reference []string `json:"reference"`  // Reference images for tile set creation
 }
@@ -47,6 +46,7 @@ const (
 type CreateObjectRequest struct {
 	UserPrompt string `json:"prompt"`  // Prompt for the object
 	ProjectPrompt string `json:"projectPrompt"`  // Project prompt
+	Derictions  int `json:"derictions"`  // Number of directions for the object (e.g. 1, 4, 8)
 	Reference string `json:"reference"`  // Reference image for object creation
 	Size int `json:"size"`  // Size of the object (e.g. "32X32", "64X64")
 	View ViewType `json:"view"`  // View type of the object (e.g. "TopDown", "SideView", "Isometric")
