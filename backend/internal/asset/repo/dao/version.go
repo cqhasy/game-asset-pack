@@ -5,3 +5,8 @@ type AssetVersion struct {
 	AssetID uint
 	Version uint
 }
+
+type AssetVersionDao interface {
+	CreateAssetVersion(version *AssetVersion) (uint, error)
+	DeleteAssetVersion(assetID uint, version uint) error
+}

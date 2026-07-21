@@ -25,6 +25,7 @@ AssetTypeScenery AssetType = "scenery"
 )
 
 const (
+
 AssetResourceTypeProtoType AssetResourceType = "protoType"
 
 // image绑定在protoType上
@@ -77,6 +78,7 @@ type AssetResource struct {
 type AssetService interface {
 	// 创建一个Character Asset，创建一个空protoType Resource
 	CreateCharacterAsset(ctx context.Context, asset *Asset) (uint, error)
+	GetProtoTypeResources(ctx context.Context, assetID uint, version uint) (*AssetResource, error)
 	// 创建一个Object Asset，创建一个空protoType Resource
 	CreateObjectAsset(ctx context.Context, asset *Asset) (uint, error)
 	CreateTileSetAsset(ctx context.Context, asset *Asset) (uint, error)
@@ -89,10 +91,9 @@ type AssetService interface {
 	// 创建绑定到某个Animation下的Frame Resource
 	CreateFrameResources(ctx context.Context, resource []AssetResource) ([]AssetResource, error)
 	EditFrameResources(ctx context.Context, resource []AssetResource) ([]AssetResource, error)
-	// CreateItemResource(ctx context.Context, resource *AssetResource) (uint, error)
-	// CreateUIResource(ctx context.Context, resource *AssetResource) (uint, error)
-	// CreateSceneryResource(ctx context.Context, resource *AssetResource) (uint, error)
 
+	CreateTileResources(ctx context.Context, resource []AssetResource) ([]AssetResource, error)
+	EditItemResources(ctx context.Context, resource []AssetResource) ([]AssetResource, error)
 	CreateImageResources(ctx context.Context, resource []AssetResource) ([]AssetResource, error)
 	CreateRecord(ctx context.Context, version *AssetVersion) (uint, error)
 	GetVersionHistory(ctx context.Context, assetID uint) ([]AssetVersion, error)

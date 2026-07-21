@@ -13,6 +13,13 @@ type AssetRepository interface {
 	// 创建绑定到某个protoType的image资源
 	CreateImageResources(ctx context.Context, resource []domain.AssetResource) ([]domain.AssetResource, error)
 	CreateAnimationResource(ctx context.Context, resource *domain.AssetResource) (uint, error)
+
+	UpdateFrameResources(ctx context.Context, resource []domain.AssetResource) error
+	UpdateProtoTypeResources(ctx context.Context, resource []domain.AssetResource) error
+
+	GetAnimations(ctx context.Context, assetID uint, version uint) ([]domain.AssetResource, error)
+	GetProtoTypeResources(ctx context.Context, assetID uint, version uint) ([]domain.AssetResource, error)
+	
 	// 创建一个AssetVersion并更新Asset的Version，复制Asset下的所有Resource到新版本下
 	CreateRecord(ctx context.Context, version *domain.AssetVersion) (*domain.AssetVersion, error)
 	// 删除 AssetVersion，回滚Asset的Version到上一个版本,删除所有该版本的Resource
