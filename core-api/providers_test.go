@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,34 @@ func TestInitImageServiceRoutesConfiguredModelProtocol(t *testing.T) {
 	}
 	if len(result.Images) != 1 {
 		t.Fatalf("images = %d, want 1", len(result.Images))
+	}
+}
+
+func TestInitImageServiceMapsEditFormatDefaultsAndOverrides(t *testing.T) {
+	for _, test := range []struct{ name, global, model, want string }{
+		{"global multipart", "multipart", "", "multipart/form-data"},
+		{"model multipart", "json", "multipart", "multipart/form-data"},
+		{"model json", "multipart", "json", "application/json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/images/edits" || !strings.HasPrefix(r.Header.Get("Content-Type"), test.want) {
+					t.Errorf("path=%s content-type=%s, want edits %s", r.URL.Path, r.Header.Get("Content-Type"), test.want)
+				}
+				_, _ = w.Write([]byte(`{"data":[{"b64_json":"aW1hZ2U="}]}`))
+			}))
+			defer server.Close()
+			service := InitImageService(config.ImageClientConfig{
+				BaseURL: server.URL, DefaultModel: "custom-image", EditFormat: test.global,
+				Models: []config.ModelConfig{{Name: "custom-image", Protocol: "openai_images", EditFormat: test.model}},
+			}, nil)
+			_, err := service.Generate(context.Background(), &imageclient.GenerateRequest{
+				ReferenceImages: []string{"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

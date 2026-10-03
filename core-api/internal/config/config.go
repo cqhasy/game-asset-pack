@@ -37,12 +37,15 @@ type LogConfig struct {
 	Compress   bool   `mapstructure:"compress" yaml:"compress"`
 }
 
-// ModelConfig maps one gateway model to its required wire protocol and endpoint settings.
+// ModelConfig maps one model to its wire protocol and endpoint credentials.
+// BaseURL and APIKey may be omitted when the client-level defaults are set.
 type ModelConfig struct {
 	Name     string `mapstructure:"name" yaml:"name"`
 	Protocol string `mapstructure:"protocol" yaml:"protocol"`
 	BaseURL  string `mapstructure:"baseURL" yaml:"baseURL"`
 	APIKey   string `mapstructure:"apiKey" yaml:"apiKey"`
+	// EditFormat selects JSON or multipart edits for image routes only.
+	EditFormat string `mapstructure:"editFormat" yaml:"editFormat"`
 }
 
 type ImageClientConfig struct {
@@ -50,7 +53,9 @@ type ImageClientConfig struct {
 	APIKey        string `mapstructure:"apiKey" yaml:"apiKey"`
 	DefaultModel  string `mapstructure:"defaultModel" yaml:"defaultModel"`
 	FallbackModel string `mapstructure:"fallbackModel" yaml:"fallbackModel"`
+	EditFormat    string `mapstructure:"editFormat" yaml:"editFormat"`
 	// Provider is retained for configurations that predate model routing.
+	// New configurations should select a protocol per entry in Models instead.
 	Provider string        `mapstructure:"provider" yaml:"provider"`
 	Models   []ModelConfig `mapstructure:"models" yaml:"models"`
 }

@@ -3,6 +3,7 @@ package imageclient
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -15,12 +16,22 @@ import (
 )
 
 const (
+	maxGeneratedImageBytes               = 32 << 20
 	generatedImageDownloadTimeout        = 45 * time.Second
 	generatedImageDialTimeout            = 10 * time.Second
 	generatedImageResponseHeaderTimeout  = 30 * time.Second
 	generatedImageTLSHandshakeTimeout    = 15 * time.Second
 	generatedImageMaxResponseHeaderBytes = 1 << 20
 )
+
+func isLikelyBase64(value string) bool {
+	if len(value) < 32 {
+		return false
+	}
+	value = strings.TrimSpace(value)
+	_, err := base64.StdEncoding.DecodeString(value)
+	return err == nil
+}
 
 var blockedGeneratedImagePrefixes = []netip.Prefix{
 	netip.MustParsePrefix("100.64.0.0/10"),

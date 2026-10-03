@@ -2,7 +2,7 @@ package imageclient
 
 // Params carries provider-specific request parameters that the generic layer
 // does not interpret. Each provider reads only the keys it understands; for
-// example, the QNA provider reads "quality". Callers must consult a provider's
+// example, the Images adapter reads "quality". Callers must consult a provider's
 // documentation for supported keys.
 type Params map[string]string
 

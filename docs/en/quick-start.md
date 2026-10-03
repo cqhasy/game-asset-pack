@@ -8,8 +8,9 @@ This guide runs the Core API and frontend locally for development. PostgreSQL ru
 - Node.js 24
 - pnpm 11.5.0
 - Docker with Docker Compose
-- A Qiniu Kodo bucket and download domain
-- API credentials for the configured image and LLM models
+- A Qiniu Kodo bucket and download domain for uploads and stored asset files
+- API credentials for the configured image and LLM models. Image generation
+  accepts any OpenAI-compatible endpoint, such as API Nebula.
 
 The repository also supports [Lefthook](./lefthook-setup.md), but it is not required to start the application.
 
@@ -44,6 +45,20 @@ Review `config.yaml` and configure at least the following values:
 - `image.models` and `image.defaultModel` for image generation
 - `llm.models` and `llm.defaultModel` for structured generation tasks
 - `qiniu.accessKey`, `qiniu.secretKey`, `qiniu.bucket`, and `qiniu.domain`
+
+For image generation, set each model's `protocol`, `baseURL`, and `apiKey` in
+`image.models`. The example uses API Nebula with the OpenAI-compatible
+`chat_completions` protocol; replace it with any compatible endpoint and model
+available from your account. Confirm each model identifier in your gateway's
+documentation; the sample identifiers do not imply the gateway offers those
+exact names. Enter API keys directly in your uncommitted configuration; YAML
+values such as `${KEY}` are not automatically expanded from the environment.
+
+For `openai_images` editing, set `image.models[].editFormat: multipart` when
+the endpoint expects standard OpenAI file uploads. The default `json` keeps the
+existing gateway edit encoding; the optional global `image.editFormat` supplies
+the default for models that omit this setting. Video generation remains
+configured separately under `video`.
 
 Do not commit `config.yaml` or any credentials.
 
@@ -128,7 +143,7 @@ Run `docker compose ps postgres` from the repository root and confirm that the s
 
 ### The Core API reports invalid storage configuration
 
-The API requires valid Qiniu credentials, a bucket name, and a download domain during startup. A bucket name is not a URL.
+The API requires valid Qiniu credentials, a bucket name, and a download domain during startup. A bucket name is not a URL. Qiniu is used for object storage and uploads; it is independent from the image model endpoint.
 
 ### Login fails
 
@@ -136,6 +151,6 @@ The application has no self-service registration. Confirm that the seed script c
 
 ### Asset generation fails
 
-Confirm that every selected image or LLM model has a valid `baseURL`, `apiKey`, and supported protocol. The model named by each `defaultModel` must exist in the corresponding `models` list.
+Confirm that every selected image or LLM model has a valid `baseURL`, `apiKey`, and supported protocol. Image endpoints must implement the configured OpenAI-compatible protocol. The model named by each `defaultModel` must exist in the corresponding `models` list.
 
 For detailed Core API configuration, see the [Core API README](../../core-api/README.md).

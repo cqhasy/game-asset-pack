@@ -2,14 +2,12 @@ package imageclient
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/1024XEngineer/Holonic-Asset/internal/module/generator/qnasdk"
 	"github.com/1024XEngineer/Holonic-Asset/internal/module/logger"
 )
 
-// ProtocolType selects the wire format used for one QNA image model.
+// ProtocolType selects the wire format used by one OpenAI-compatible image model.
 type ProtocolType string
 
 const (
@@ -17,7 +15,7 @@ const (
 	ProtocolTypeAuto ProtocolType = "auto"
 	// ProtocolTypeOpenAIImages uses the /v1/images/* endpoint format.
 	ProtocolTypeOpenAIImages ProtocolType = "openai_images"
-	// ProtocolTypeChatCompletions uses QNA's /v1/chat/completions format.
+	// ProtocolTypeChatCompletions uses the /v1/chat/completions format.
 	ProtocolTypeChatCompletions ProtocolType = "chat_completions"
 
 	// protocolTypeLegacyGeminiChat is accepted for existing deployments. The
@@ -27,10 +25,11 @@ const (
 
 // ModelConfig assigns one model to its wire protocol and endpoint settings.
 type ModelConfig struct {
-	Name     string
-	Protocol string
-	BaseURL  string
-	APIKey   string
+	Name       string
+	Protocol   string
+	BaseURL    string
+	APIKey     string
+	EditFormat string
 }
 
 // FactoryConfig provides parameters to initialize an ImageProvider.
@@ -39,6 +38,8 @@ type FactoryConfig struct {
 	APIKey        string
 	DefaultModel  string
 	FallbackModel string
+	// EditFormat defaults to JSON for existing gateway configurations.
+	EditFormat string
 	// Provider is the legacy global protocol override used when Models is empty.
 	Provider   string
 	Models     []ModelConfig
@@ -51,7 +52,7 @@ type FactoryConfig struct {
 // second model.
 func NewImageProvider(cfg FactoryConfig) ImageProvider {
 	if len(cfg.Models) > 0 {
-		provider := newQNAProvider(cfg)
+		provider := newModelRouter(cfg)
 		fallbackModel := strings.TrimSpace(cfg.FallbackModel)
 		if fallbackModel == "" || strings.EqualFold(fallbackModel, cfg.DefaultModel) {
 			return provider
@@ -76,6 +77,7 @@ func NewImageProvider(cfg FactoryConfig) ImageProvider {
 		BaseURL:      cfg.BaseURL,
 		APIKey:       cfg.APIKey,
 		DefaultModel: fallbackModel,
+		EditFormat:   cfg.EditFormat,
 		HTTPClient:   cfg.HTTPClient,
 		Logger:       cfg.Logger,
 	}, cfg.BaseURL, cfg.APIKey)
@@ -94,50 +96,7 @@ func createProtocolAdapter(
 	cfg FactoryConfig,
 	modelBaseURL, modelAPIKey string,
 ) protocolAdapter {
-	baseURL := strings.TrimSpace(modelBaseURL)
-	if baseURL == "" {
-		baseURL = strings.TrimSpace(cfg.BaseURL)
-	}
-	apiKey := strings.TrimSpace(modelAPIKey)
-	if apiKey == "" {
-		apiKey = strings.TrimSpace(cfg.APIKey)
-	}
-	sdkClient := qnasdk.NewClient(baseURL, apiKey, cfg.HTTPClient)
-
-	selected := ProtocolType(strings.ToLower(strings.TrimSpace(protocol)))
-	if selected == protocolTypeLegacyGeminiChat {
-		selected = ProtocolTypeChatCompletions
-	}
-	if selected == "" || selected == ProtocolTypeAuto {
-		if IsChatProtocolModel(model) {
-			selected = ProtocolTypeChatCompletions
-		} else {
-			selected = ProtocolTypeOpenAIImages
-		}
-	}
-
-	switch selected {
-	case ProtocolTypeChatCompletions:
-		return NewQNAChatCompletionsAdapter(QNAChatCompletionsAdapterConfig{
-			BaseURL:      baseURL,
-			APIKey:       apiKey,
-			DefaultModel: model,
-			HTTPClient:   cfg.HTTPClient,
-			SDKClient:    sdkClient,
-			Logger:       cfg.Logger,
-		})
-	case ProtocolTypeOpenAIImages:
-		return NewQNAImagesAdapter(QNAImagesAdapterConfig{
-			BaseURL:      baseURL,
-			APIKey:       apiKey,
-			DefaultModel: model,
-			HTTPClient:   cfg.HTTPClient,
-			SDKClient:    sdkClient,
-			Logger:       cfg.Logger,
-		})
-	default:
-		return newInvalidProtocolAdapter("unsupported image protocol " + strconv.Quote(protocol))
-	}
+	return createGenericProtocolAdapter(protocol, model, cfg, modelBaseURL, modelAPIKey)
 }
 
 // IsChatProtocolModel reports whether modelName targets a chat-based multimodal image model.

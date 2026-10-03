@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/1024XEngineer/Holonic-Asset/internal/module/generator/qnasdk"
 )
 
 type coverageImageAdapter struct {
@@ -64,19 +62,19 @@ func TestImageCoverageLegacyFactoryFallback(t *testing.T) {
 }
 
 func TestImageCoverageProtocolHelpers(t *testing.T) {
-	adapter := NewQNAChatCompletionsAdapter(QNAChatCompletionsAdapterConfig{})
-	if _, err := adapter.extractImages(context.Background(), []chatChoice{{
-		Message: chatMessage{Content: "data:image/png;base64,not-base64"},
+	adapter := NewOpenAIChatCompletionsAdapter(OpenAIChatCompletionsAdapterConfig{})
+	if _, err := adapter.extractImages(context.Background(), []openAIChatChoice{{
+		Message: openAIChatMessage{Content: "data:image/png;base64,not-base64"},
 	}}); err == nil {
 		t.Fatal("invalid inline image was accepted")
 	}
 
 	for _, value := range []string{"not-a-data-url", "data:image/png;base64,"} {
-		if _, err := parseImageDataURL(value); err == nil {
+		if _, err := parseOpenAIImageDataURL(value); err == nil {
 			t.Fatalf("invalid data URL %q was accepted", value)
 		}
 	}
-	if got := chatErrorMessage([]byte(`{"error":{"message":"nested"}}`)); got != "nested" {
+	if got := openAIResponseErrorMessage([]byte(`{"error":{"message":"nested"}}`), "502 Bad Gateway"); got != "nested" {
 		t.Fatalf("nested error message = %q", got)
 	}
 
@@ -97,9 +95,9 @@ func TestImageCoverageProtocolHelpers(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	classifications := []error{
-		classifyQNARequestError(canceled, errors.New("transport")),
-		classifyQNARequestError(context.Background(), context.DeadlineExceeded),
-		classifyQNARequestError(context.Background(), errors.New("transport")),
+		classifyOpenAIAdapterError(canceled, errors.New("transport")),
+		classifyOpenAIAdapterError(context.Background(), context.DeadlineExceeded),
+		classifyOpenAIAdapterError(context.Background(), errors.New("transport")),
 	}
 	wantKinds := []ErrorKind{ErrorKindCanceled, ErrorKindTimeout, ErrorKindTransport}
 	for index, err := range classifications {
@@ -108,11 +106,11 @@ func TestImageCoverageProtocolHelpers(t *testing.T) {
 			t.Fatalf("classification %d = %v, want %s", index, err, wantKinds[index])
 		}
 	}
-	if kind, transient := classifyQNAStatus(http.StatusTeapot); kind != ErrorKindInvalidRequest || transient {
+	if kind, transient := classifyOpenAIStatus(http.StatusTeapot); kind != ErrorKindInvalidRequest || transient {
 		t.Fatalf("teapot classification = (%s, %t)", kind, transient)
 	}
 	cause := errors.New("cause message")
-	if got := newQNAError(ErrorKindTransport, 0, true, "", cause).Message; got != cause.Error() {
+	if got := newOpenAIProviderError(ErrorKindTransport, 0, true, "", cause).Message; got != cause.Error() {
 		t.Fatalf("derived message = %q", got)
 	}
 }
@@ -133,36 +131,20 @@ func TestImageCoverageGatewayEditFailure(t *testing.T) {
 	}
 }
 
-func TestImageCoverageSDKErrorClassification(t *testing.T) {
-	apiErr := &qnasdk.Error{StatusCode: http.StatusInternalServerError}
-	status, message, ok := qnaSDKAPIError(apiErr)
-	if !ok || status != http.StatusInternalServerError || message == "" {
-		t.Fatalf("SDK API error = (%d, %q, %t)", status, message, ok)
-	}
-	if isQNASDKConfigurationError(nil) || isQNASDKResponseDecodeError(nil) {
-		t.Fatal("nil SDK error was classified")
-	}
-
+func TestImageCoverageHTTPErrorClassification(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	imageErrors := []error{
-		classifyQNAImageSDKError(canceled, errors.New("request")),
-		classifyQNAImageSDKError(context.Background(), errors.New("WithBaseURL failed")),
-		classifyQNAImageSDKError(context.Background(), errors.New("error parsing response JSON")),
-		classifyQNAImageSDKError(context.Background(), errors.New("transport")),
-	}
-	chatErrors := []error{
-		classifyChatSDKError(canceled, errors.New("request")),
-		classifyChatSDKError(context.Background(), errors.New("transport")),
-	}
-	for _, err := range append(imageErrors, chatErrors...) {
+	for _, err := range []error{
+		classifyOpenAIAdapterError(canceled, errors.New("request")),
+		classifyOpenAIAdapterError(context.Background(), &openAIHTTPError{StatusCode: http.StatusInternalServerError, Message: "failure"}),
+		classifyOpenAIAdapterError(context.Background(), errors.New("transport")),
+	} {
 		var providerErr *ProviderError
 		if !errors.As(err, &providerErr) {
-			t.Fatalf("SDK classification = %T, want ProviderError", err)
+			t.Fatalf("classification = %T, want ProviderError", err)
 		}
 	}
 }
-
 func TestImageCoverageCanceledRetryBackoff(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()

@@ -35,11 +35,13 @@ log:
 image:
   defaultModel: openai/gpt-image-2
   fallbackModel: google/gemini-image
+  editFormat: json
   models:
     - name: openai/gpt-image-2
       protocol: openai_images
       baseURL: https://images.example.test
       apiKey: test-image-key
+      editFormat: multipart
     - name: google/gemini-image
       protocol: chat_completions
       baseURL: https://google-images.example.test
@@ -95,8 +97,10 @@ qiniu:
 	if loaded.Log.Path != "./logs/app.log" || !loaded.Log.Compress {
 		t.Fatalf("unexpected log config: %+v", loaded.Log)
 	}
-	if len(loaded.Image.Models) != 2 ||
+	if loaded.Image.EditFormat != "json" ||
+		len(loaded.Image.Models) != 2 ||
 		loaded.Image.Models[0].Protocol != "openai_images" ||
+		loaded.Image.Models[0].EditFormat != "multipart" ||
 		loaded.Image.Models[0].BaseURL != "https://images.example.test" ||
 		loaded.Image.Models[0].APIKey != "test-image-key" ||
 		loaded.Image.Models[1].Name != "google/gemini-image" ||
@@ -143,7 +147,15 @@ func TestLoadConfigDecodesExampleConfig(t *testing.T) {
 	if loaded.Image.DefaultModel != "openai/gpt-image-2" {
 		t.Fatalf("unexpected image config: %+v", loaded.Image)
 	}
-	if len(loaded.Image.Models) != 2 || loaded.Image.Models[1].Protocol != "chat_completions" || loaded.Image.Models[0].BaseURL != "https://api.qnaigc.com" {
+	if loaded.Image.EditFormat != "json" ||
+		len(loaded.Image.Models) != 2 ||
+		loaded.Image.Models[0].Name != "openai/gpt-image-2" ||
+		loaded.Image.Models[0].Protocol != "openai_images" ||
+		loaded.Image.Models[0].BaseURL != "https://image-provider.example" ||
+		loaded.Image.Models[0].EditFormat != "multipart" ||
+		loaded.Image.Models[1].Name != "google/gemini-3.1-flash-lite-image" ||
+		loaded.Image.Models[1].Protocol != "chat_completions" ||
+		loaded.Image.Models[1].BaseURL != "https://apinebula.ai" {
 		t.Fatalf("unexpected example image models: %+v", loaded.Image.Models)
 	}
 	if loaded.Auth.TokenExpiry != 24*time.Hour {

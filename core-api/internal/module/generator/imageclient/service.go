@@ -2,8 +2,10 @@ package imageclient
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -74,9 +76,15 @@ func (s *imageGenerationService) Generate(
 	mediaType := mediaTypeForFormat(providerResult.OutputFormat)
 	images := make([]GeneratedImage, 0, len(providerResult.Images))
 	for _, imageBase64 := range providerResult.Images {
+		imageMediaType := mediaType
+		if data, err := base64.StdEncoding.DecodeString(imageBase64); err == nil {
+			if detected := http.DetectContentType(data); strings.HasPrefix(detected, "image/") {
+				imageMediaType = detected
+			}
+		}
 		images = append(images, GeneratedImage{
 			Base64:    imageBase64,
-			MediaType: mediaType,
+			MediaType: imageMediaType,
 		})
 	}
 

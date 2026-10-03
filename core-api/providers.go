@@ -59,15 +59,18 @@ func InitAuthService(cfg config.AuthConfig, store auth.Store) (*auth.Service, er
 	return auth.NewService(store, cfg.JWTSecret, cfg.TokenExpiry)
 }
 
-// InitImageService creates the external image provider and its application service.
+// InitImageService creates the provider-neutral image service. Each configured
+// model supplies its own OpenAI-compatible endpoint, credentials, and protocol;
+// client-level values remain available as fallback defaults.
 func InitImageService(cfg config.ImageClientConfig, appLogger logger.Logger) imageclient.ImageGenerationService {
 	models := make([]imageclient.ModelConfig, 0, len(cfg.Models))
 	for _, model := range cfg.Models {
 		models = append(models, imageclient.ModelConfig{
-			Name:     model.Name,
-			Protocol: model.Protocol,
-			BaseURL:  model.BaseURL,
-			APIKey:   model.APIKey,
+			Name:       model.Name,
+			Protocol:   model.Protocol,
+			BaseURL:    model.BaseURL,
+			APIKey:     model.APIKey,
+			EditFormat: model.EditFormat,
 		})
 	}
 	provider := imageclient.NewImageProvider(imageclient.FactoryConfig{
@@ -75,6 +78,7 @@ func InitImageService(cfg config.ImageClientConfig, appLogger logger.Logger) ima
 		APIKey:        cfg.APIKey,
 		DefaultModel:  cfg.DefaultModel,
 		FallbackModel: cfg.FallbackModel,
+		EditFormat:    cfg.EditFormat,
 		Provider:      cfg.Provider,
 		Models:        models,
 		Logger:        appLogger,

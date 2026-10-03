@@ -220,7 +220,7 @@ func TestQNAChatCompletionsAdapterRejectsInvalidSuccessResponses(t *testing.T) {
 		body string
 		want string
 	}{
-		{name: "malformed JSON", body: `{`, want: "decode chat completion"},
+		{name: "malformed JSON", body: `{`, want: "decode provider response"},
 		{name: "no choices", body: `{}`, want: "no choices"},
 		{name: "no image data", body: `{"choices":[{"message":{"content":"plain text"}}]}`, want: "no image data"},
 	} {

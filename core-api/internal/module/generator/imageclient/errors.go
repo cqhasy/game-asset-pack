@@ -34,9 +34,6 @@ func (e *ProviderError) Error() string {
 		return ""
 	}
 	provider := "image provider"
-	if e.Provider != "" {
-		provider = e.Provider + " provider"
-	}
 	if e.Message != "" {
 		return fmt.Sprintf("%s: %s", provider, e.Message)
 	}

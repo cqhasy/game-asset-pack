@@ -92,8 +92,8 @@ The seed is idempotent by username and does not replace existing passwords.
 ## Model Gateway Routing
 
 Each model in `image`, `llm`, and `video` binds its own wire protocol and
-endpoint settings (`baseURL` and `apiKey`), allowing multiple provider channels
-(such as QNA/Qiniu, Google official, or Alibaba) to be configured side-by-side.
+endpoint settings (`baseURL` and `apiKey`). Image models may use any endpoint
+implementing the supported OpenAI-compatible image protocols.
 Top-level `baseURL` and `apiKey` settings remain available as optional fallback
 defaults:
 
@@ -101,14 +101,16 @@ defaults:
 image:
   defaultModel: "openai/gpt-image-2"
   fallbackModel: "google/gemini-3.1-flash-lite-image"
+  editFormat: json
   models:
     - name: "openai/gpt-image-2"
       protocol: openai_images
-      baseURL: "https://api.qnaigc.com"
+      baseURL: "https://image-provider.example"
       apiKey: "..."
+      editFormat: multipart
     - name: "google/gemini-3.1-flash-lite-image"
       protocol: chat_completions
-      baseURL: "https://api.qnaigc.com"
+      baseURL: "https://apinebula.ai"
       apiKey: "..."
 
 llm:
@@ -127,13 +129,33 @@ video:
   retryDelay: 2s
 ```
 
+Model identifiers in this example are illustrative. Confirm the model names
+and capabilities exposed by your gateway, including API Nebula; different
+gateways may use different identifiers. Enter the API key directly in your
+uncommitted configuration. YAML values such as `${KEY}` are not automatically
+expanded from environment variables.
+
 `openai_images` calls `/v1/images/generations` or `/v1/images/edits`, while
-`chat_completions` calls `/v1/chat/completions`. `fal_queue` derives video task
-paths from the selected model, for example
+`chat_completions` calls `/v1/chat/completions`. Any endpoint implementing one
+of these OpenAI-compatible protocols can be configured, including API Nebula.
+For `openai_images`, `image.models[].editFormat: multipart` uses the standard
+OpenAI Images edit file-upload API. `json` preserves the existing gateway edit
+format and is the default when no edit format is set. The optional global
+`image.editFormat` applies to models without their own setting. This setting
+does not affect `chat_completions` requests.
+
+Generic image routes send the requested size unchanged and preserve edit masks
+when the endpoint rejects them. Choose sizes supported by the selected model.
+The deprecated `NewQNA...` constructors retain their old QNA-specific defaults,
+minimum-size adjustment, and mask retry behavior for source compatibility.
+Normal application configuration uses the generic routes.
+
+Video retains its existing provider implementation. `fal_queue` derives video
+task paths from the selected model, for example
 `/queue/bytedance/seedance-2.0/image-to-video` and
 `/queue/bytedance/seedance-2.0/requests`.
 
-The provider owns the gateway connections and model routing; protocol adapters
+The image provider owns endpoint connections and model routing; protocol adapters
 own request and response formats. The order of `models` does not select a
 default or control fallback. Each image or LLM `defaultModel` must name an entry
 in its client's `models` array. Video has no configured default model: an
@@ -142,6 +164,9 @@ empty video `models` array, the existing fixed Fal Queue paths remain active.
 For images, `fallbackModel` is tried only after a transient primary failure. The
 legacy singular image `provider` setting remains supported only when no image
 `models` array is configured.
+
+Qiniu settings below configure object storage for uploads and stored asset
+references; they do not select an image model.
 
 ## Qiniu Uploads
 

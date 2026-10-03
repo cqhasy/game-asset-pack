@@ -3,6 +3,7 @@ package imageclient
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -37,15 +38,26 @@ func (zeroReader) Read(buffer []byte) (int, error) {
 }
 
 func TestNewQNAChatCompletionsAdapterDefaults(t *testing.T) {
-	provider := NewQNAChatCompletionsAdapter(QNAChatCompletionsAdapterConfig{})
-	if provider.baseURL != DefaultQNABaseURL || provider.defaultModel != DefaultQNAChatCompletionsModel {
-		t.Fatalf("unexpected defaults: base=%q model=%q", provider.baseURL, provider.defaultModel)
+	var requestPath, requestModel string
+	client := &http.Client{Transport: internalRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requestPath = request.URL.String()
+		var payload struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		requestModel = payload.Model
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"data:image/png;base64,aW1hZ2U="}}]}`)), Header: http.Header{"Content-Type": []string{"application/json"}}}, nil
+	})}
+	provider := NewQNAChatCompletionsAdapter(QNAChatCompletionsAdapterConfig{HTTPClient: client})
+	if _, err := provider.Generate(context.Background(), &ProviderRequest{Prompt: "test"}); err != nil {
+		t.Fatalf("generate: %v", err)
 	}
-	if provider.httpClient.Timeout != defaultChatHTTPTimeout || provider.downloadHTTPClient == nil {
-		t.Fatalf("default clients are not configured: %+v", provider)
+	if requestPath != DefaultQNABaseURL+"/v1/chat/completions" || requestModel != DefaultQNAChatCompletionsModel {
+		t.Fatalf("legacy defaults: URL=%q model=%q", requestPath, requestModel)
 	}
 }
-
 func TestQNAChatCompletionsAdapterRejectsInvalidEndpoint(t *testing.T) {
 	provider := NewQNAChatCompletionsAdapter(QNAChatCompletionsAdapterConfig{BaseURL: "://invalid"})
 	_, err := provider.Generate(context.Background(), &ProviderRequest{Prompt: "test"})
@@ -84,7 +96,10 @@ func TestClassifyChatRequestError(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			providerErr := classifyChatRequestError(test.ctx, test.err)
+			var providerErr *ProviderError
+			if err := classifyOpenAIAdapterError(test.ctx, test.err); !errors.As(err, &providerErr) {
+				t.Fatalf("classification error = %v, want provider error", err)
+			}
 			if providerErr.Kind != test.wantKind || providerErr.Transient != test.transient {
 				t.Fatalf("classification = (%s, %t), want (%s, %t)",
 					providerErr.Kind, providerErr.Transient, test.wantKind, test.transient)
@@ -118,11 +133,11 @@ func TestClassifyChatStatusCoversProviderResponses(t *testing.T) {
 		{statusCode: http.StatusBadGateway, wantKind: ErrorKindUnavailable, transient: true},
 		{statusCode: http.StatusGatewayTimeout, wantKind: ErrorKindUnavailable, transient: true},
 		{statusCode: 599, wantKind: ErrorKindUnavailable, transient: true},
-		{statusCode: http.StatusTeapot, wantKind: ErrorKindInvalidResponse},
+		{statusCode: http.StatusTeapot, wantKind: ErrorKindInvalidRequest},
 	}
 
 	for _, test := range tests {
-		kind, transient := classifyChatStatus(test.statusCode)
+		kind, transient := classifyOpenAIStatus(test.statusCode)
 		if kind != test.wantKind || transient != test.transient {
 			t.Fatalf("status %d = (%s, %t), want (%s, %t)",
 				test.statusCode, kind, transient, test.wantKind, test.transient)
@@ -130,41 +145,24 @@ func TestClassifyChatStatusCoversProviderResponses(t *testing.T) {
 	}
 }
 
-func TestChatErrorMessageShapes(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want string
-	}{
-		{name: "top-level message", body: `{"message":"top level"}`, want: "top level"},
-		{name: "nested text", body: `{"error":"nested text"}`, want: "nested text"},
-		{name: "plain text", body: "  upstream unavailable  ", want: "upstream unavailable"},
-		{name: "empty object", body: `{}`, want: `{}`},
+func TestOpenAIErrorMessageShapes(t *testing.T) {
+	tests := []struct{ name, body, want string }{
+		{"top-level message", `{"message":"top level"}`, "top level"},
+		{"nested text", `{"error":"nested text"}`, "nested text"},
+		{"plain text fallback", "  upstream unavailable  ", "502 Bad Gateway"},
+		{"empty object fallback", `{}`, "502 Bad Gateway"},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := chatErrorMessage([]byte(test.body)); got != test.want {
+			if got := openAIResponseErrorMessage([]byte(test.body), "502 Bad Gateway"); got != test.want {
 				t.Fatalf("message = %q, want %q", got, test.want)
 			}
 		})
 	}
-
-	response := &http.Response{
-		StatusCode: http.StatusTeapot,
-		Status:     "418 I'm a teapot",
-		Body:       io.NopCloser(strings.NewReader("")),
-	}
-	err := chatStatusError(response)
-	var providerErr *ProviderError
-	if !errors.As(err, &providerErr) || providerErr.Message != response.Status {
-		t.Fatalf("status error = %v, want response status message", err)
-	}
 }
-
 func TestChatMessageUnmarshalShapes(t *testing.T) {
 	t.Run("malformed", func(t *testing.T) {
-		var message chatMessage
+		var message openAIChatMessage
 		if err := message.UnmarshalJSON([]byte(`{`)); err == nil {
 			t.Fatal("malformed message was accepted")
 		}
@@ -184,7 +182,7 @@ func TestChatMessageUnmarshalShapes(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var message chatMessage
+			var message openAIChatMessage
 			if err := message.UnmarshalJSON([]byte(test.body)); err != nil {
 				t.Fatalf("unmarshal message: %v", err)
 			}
@@ -203,16 +201,16 @@ func TestChatMessageUnmarshalShapes(t *testing.T) {
 
 func TestChatCompletionsImageReferenceHelpers(t *testing.T) {
 	raw := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 32)))
-	if got := formatChatImageRef(""); got != "" {
+	if got := formatOpenAIChatImageRef(""); got != "" {
 		t.Fatalf("empty reference = %q", got)
 	}
-	if got := formatChatImageRef(raw); got != "data:image/png;base64,"+raw {
+	if got := formatOpenAIChatImageRef(raw); got != "data:image/png;base64,"+raw {
 		t.Fatalf("raw base64 reference = %q", got)
 	}
-	if got := formatChatImageRef("asset-id"); got != "asset-id" {
+	if got := formatOpenAIChatImageRef("asset-id"); got != "asset-id" {
 		t.Fatalf("opaque reference = %q", got)
 	}
-	if got, err := parseImageDataURL("data:image/png;base64," + raw); err != nil || got != raw {
+	if got, err := parseOpenAIImageDataURL("data:image/png;base64," + raw); err != nil || got != raw {
 		t.Fatalf("data URL payload = %q, error = %v", got, err)
 	}
 	if !isLikelyBase64("  " + raw + "\n") {
@@ -314,46 +312,46 @@ func TestQNAChatCompletionsAdapterExtractImageBranches(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		choice  chatChoice
+		choice  openAIChatChoice
 		wantErr bool
 	}{
 		{
 			name: "images field error",
-			choice: chatChoice{Message: chatMessage{Images: []chatContentPart{{
-				Type: "image_url", ImageURL: &chatImageURL{URL: "http://127.0.0.1/image.png"},
+			choice: openAIChatChoice{Message: openAIChatMessage{Images: []openAIChatContentPart{{
+				Type: "image_url", ImageURL: &openAIChatImageURL{URL: "http://127.0.0.1/image.png"},
 			}}}},
 			wantErr: true,
 		},
 		{
 			name: "content parts error",
-			choice: chatChoice{Message: chatMessage{ContentParts: []chatContentPart{{
-				Type: "image_url", ImageURL: &chatImageURL{URL: "http://127.0.0.1/image.png"},
+			choice: openAIChatChoice{Message: openAIChatMessage{ContentParts: []openAIChatContentPart{{
+				Type: "image_url", ImageURL: &openAIChatImageURL{URL: "http://127.0.0.1/image.png"},
 			}}}},
 			wantErr: true,
 		},
 		{
 			name:    "markdown error",
-			choice:  chatChoice{Message: chatMessage{Content: "![image](http://127.0.0.1/image.png)"}},
+			choice:  openAIChatChoice{Message: openAIChatMessage{Content: "![image](http://127.0.0.1/image.png)"}},
 			wantErr: true,
 		},
 		{
 			name:    "plain URL error",
-			choice:  chatChoice{Message: chatMessage{Content: "http://127.0.0.1/image.png"}},
+			choice:  openAIChatChoice{Message: openAIChatMessage{Content: "http://127.0.0.1/image.png"}},
 			wantErr: true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := provider.extractImages(context.Background(), []chatChoice{test.choice})
+			_, err := provider.extractImages(context.Background(), []openAIChatChoice{test.choice})
 			if (err != nil) != test.wantErr {
 				t.Fatalf("extract error = %v, wantErr = %t", err, test.wantErr)
 			}
 		})
 	}
 
-	images, err := provider.extractImages(context.Background(), []chatChoice{{
-		Message: chatMessage{Content: "download https://images.example/output.png"},
+	images, err := provider.extractImages(context.Background(), []openAIChatChoice{{
+		Message: openAIChatMessage{Content: "download https://images.example/output.png"},
 	}})
 	if err != nil || len(images) != 1 {
 		t.Fatalf("plain URL images = %v, error = %v", images, err)
